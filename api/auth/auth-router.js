@@ -1,49 +1,53 @@
 const router = require("express").Router();
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-
-const User = require("../users/users-model");
-const { checkUser, checkUserExists } = require("./auth-middleware");
-const { BCRYPT_ROUNDS, JWT_SECRET } = require("../../config/index");
-
-router.post("/register", checkUser, (req, res, next) => {
-  let { username, password } = req.body;
-
-  const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
-
-  User.add({ username, password: hash })
-    .then((newUser) => {
-      res.status(201).json(newUser);
-    })
-    .catch(next);
-});
-
-router.post("/login", checkUserExists, (req, res, next) => {
-  let { username, password } = req.body;
-
-  User.findBy({ username })
-    .then(([user]) => {
-      if (user && bcrypt.compareSync(password, user.password)) {
-        const token = generateToken(user);
-        res.status(200).json({
-          message: `welcome, ${user.username}`,
-          token,
-        });
-      }
-    })
-    .catch(next);
-});
+const bcrypt = require("bcryptjs");
+const Users = require("../users/users-model");
+const { JWT_SECRET } = require("../../config");
+const {
+  validate,
+  usernameCheck,
+  userNameExists,
+} = require("./auth-middleware");
 
 function generateToken(user) {
   const payload = {
     subject: user.id,
     username: user.username,
   };
-  const options = {
-    expiresIn: "1d",
-  };
-
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
+  const options = { expiresIn: "1d" };
+  return jwt.sign(payload, JWT_SECRET, options);
 }
+
+router.post("/register", validate, usernameCheck, async (req, res, next) => {
+  const { username, password } = req.body;
+  const hash = bcrypt.hashSync(password, 8);
+  const user = { username, password: hash };
+
+  Users.add(user)
+    .then((saved) => {
+      res
+        .status(201)
+        .json({ ...saved, message: `Great to have you, ${saved.username}` });
+    })
+    .catch(next);
+});
+
+router.post("/login", validate, userNameExists, async (req, res, next) => {
+  let user = req.user;
+  let { username, password } = req.body;
+  try {
+    if (bcrypt.compareSync(password, user.password)) {
+      res.status(200).json({
+        message: `Welcome, ${username}`,
+        token: generateToken(user),
+      });
+    } else {
+      res.status(401).json({ message: "invalid credentials" });
+    }
+  } catch {
+    res.status(401).json({ message: "Something went wrong here" });
+  }
+  next();
+});
 
 module.exports = router;

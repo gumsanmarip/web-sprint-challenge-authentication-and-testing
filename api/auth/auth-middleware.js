@@ -1,45 +1,41 @@
-const User = require("../users/users-model");
+const Users = require("../../api/users/users-model");
 
-async function checkUser(req, res, next) {
+//middleware for login and register payload validation
+const validate = (req, res, next) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    next({ status: 400, message: "username and password required" });
+  } else {
+    next();
+  }
+};
+
+const usernameCheck = async (req, res, next) => {
   try {
-    const users = await User.findBy({ username: req.body.username });
-    if (!users.length) {
-      next();
-    } else if (!req.body.username) {
-      res.status(401).json({
-        message: "username and password required",
-      });
+    const compare = await Users.findByUsername(req.body.username);
+    if (compare) {
+      res.status(400).send({ message: "Username is Taken." });
     } else {
-      res.status(422).json({
-        message: "username taken",
-      });
+      next();
     }
   } catch (err) {
     next(err);
   }
-}
+};
 
-async function checkUserExists(req, res, next) {
-  try {
-    const users = await User.findBy({ username: req.body.username });
-    if (users.length) {
-      req.user = users[0];
-      next();
-    } else if (!req.body.username || !req.body.password) {
-      res.status(401).json({
-        message: "username and password required",
-      });
-    } else {
-      res.status(401).json({
-        message: "Invalid credentials",
-      });
-    }
-  } catch (err) {
-    next(err);
+const userNameExists = async (req, res, next) => {
+  const { username } = req.body;
+  const user = await Users.findByUsername(username);
+  if (user) {
+    req.user = user;
+    next();
+  } else {
+    next({ status: 401, message: "Invalid credentials" });
   }
-}
+};
 
 module.exports = {
-  checkUser,
-  checkUserExists,
+  validate,
+  usernameCheck,
+  userNameExists,
 };
